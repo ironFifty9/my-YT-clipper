@@ -1,0 +1,54 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# requirements.txt — Python package dependencies (pinned versions)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Install with:  pip install -r requirements.txt
+#
+# All versions are pinned to exact releases (==) for fully reproducible builds.
+# A `pip install -r requirements.txt` on any machine or in any CI/CD pipeline
+# will install exactly these versions — no surprise breaking changes from a
+# newer minor or patch release.
+#
+# To upgrade a dependency:
+#   1. Change the version number here.
+#   2. Run `pip install -r requirements.txt` locally.
+#   3. Test thoroughly.
+#   4. Commit the updated requirements.txt.
+#
+# Do NOT use >= or ~= in production requirements files — they allow pip to
+# silently install a newer version that may contain breaking changes.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Flask — WSGI web framework. Provides routing, request/response objects,
+# and the jsonify() helper used throughout routes/clip.py.
+# https://flask.palletsprojects.com/
+flask==3.1.1
+
+# yt-dlp — YouTube (and many other site) video/audio downloader.
+# Used in core/worker.py to fetch the video segment via download_ranges.
+# yt-dlp releases frequently; check https://github.com/yt-dlp/yt-dlp/releases
+# for updates when YouTube changes their player API (causes yt-dlp errors).
+yt-dlp==2025.6.9
+
+# requests — HTTP client library used in core/telegram.py to call the
+# Telegram Bot API (sendMessage, editMessageText, sendDocument).
+# https://docs.python-requests.org/
+requests==2.32.3
+
+# gunicorn — Production-grade WSGI HTTP server. Replaces Flask's built-in
+# development server. Configured via gunicorn.conf.py.
+# https://gunicorn.org/
+gunicorn==23.0.0
+
+# python-dotenv — Reads key=value pairs from a .env file and injects them into
+# os.environ. Called once at the top of config.py; no-op when .env is absent
+# (e.g. in Railway/Render/Docker where env vars are injected by the platform).
+# https://saurabh-kumar.com/python-dotenv/
+python-dotenv==1.0.1
+
+# redis — Python client for the Redis in-memory data store.
+# Used by core/jobs.py when REDIS_URL is set to enable a Redis-backed job store
+# that is safe for gunicorn multi-worker deployments.
+# When REDIS_URL is not set, this package is installed but never imported.
+# https://redis-py.readthedocs.io/
+redis==5.2.1

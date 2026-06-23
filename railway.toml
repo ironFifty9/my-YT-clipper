@@ -1,0 +1,46 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# railway.toml — Railway platform deployment configuration
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Railway reads this file automatically from the root of the repository.
+# It controls how the project is built and how the resulting service is deployed.
+#
+# Full reference: https://docs.railway.app/reference/config-as-code
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Build configuration ────────────────────────────────────────────────────────
+[build]
+# Tell Railway to use the Nixpacks builder. Nixpacks reads nixpacks.toml to
+# install system packages (python311, ffmpeg-full) and Python dependencies.
+# Alternative: builder = "dockerfile" would use the DOCKERFILE in the repo.
+builder = "nixpacks"
+
+
+# ── Deploy configuration ───────────────────────────────────────────────────────
+[deploy]
+# The shell command Railway runs to start the application after a successful build.
+# Must match the [start] cmd in nixpacks.toml (the venv activation is handled
+# by Nixpacks automatically in the Railway environment, so only gunicorn is needed).
+startCommand = "gunicorn app:app --config gunicorn.conf.py"
+
+# ── Health check ───────────────────────────────────────────────────────────────
+# Railway periodically calls this HTTP path on the deployed service to verify
+# it is alive. The GET /health route in routes/clip.py returns {"status": "ok"}.
+# If this check fails (non-2xx or timeout), Railway considers the deployment
+# unhealthy and may restart the container.
+healthcheckPath = "/health"
+
+# How many seconds Railway waits for /health to respond before declaring it unhealthy.
+# 30 s is generous; the /health route is synchronous and fast (< 1 s normally).
+healthcheckTimeout = 30   # seconds
+
+# ── Restart policy ─────────────────────────────────────────────────────────────
+# "on_failure": Railway automatically restarts the service if the process exits
+# with a non-zero exit code (crash). This provides basic self-healing without
+# manual intervention.
+#
+# Other options:
+#   "never"  — do not restart automatically (debugging only)
+#   "always" — restart even on clean (exit 0) shutdowns
+restartPolicyType = "on_failure"

@@ -1,0 +1,22 @@
+# .gitattributes — Line-ending normalisation
+#
+# Forces Git to store all text files with LF line endings in the repository,
+# regardless of what OS the developer is on. Git converts to the local
+# OS line endings on checkout (CRLF on Windows, LF on macOS/Linux).
+#
+# This prevents the "LF will be replaced by CRLF" warnings on Windows and
+# ensures the files always have LF when deployed to Linux containers
+# (Railway, Render, Docker), where CRLF in shell scripts causes errors.
+
+# Apply LF normalisation to all text files by default
+* text=auto eol=lf
+
+# Explicitly mark binary files so Git never tries to diff or merge them
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.whl  binary
+*.zip  binary
+*.gz   binary

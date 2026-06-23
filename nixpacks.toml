@@ -1,0 +1,53 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# nixpacks.toml — Railway build configuration (Nixpacks builder)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Nixpacks is Railway's default build system. It reads this file to understand
+# how to build and start the application in Railway's environment.
+#
+# Why Nixpacks instead of Docker on Railway?
+#   Railway can use either. Nixpacks is simpler — no Dockerfile to maintain —
+#   but the DOCKERFILE in this repo is kept for portability to other platforms
+#   (Render, local Docker, etc.).  railway.toml sets builder = "nixpacks",
+#   so Railway uses this file when deploying.
+#
+# Nixpacks docs: https://nixpacks.com/docs
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Setup phase ────────────────────────────────────────────────────────────────
+# The setup phase installs system-level packages from the Nix package registry.
+# These are available to all subsequent phases and to the running application.
+[phases.setup]
+nixPkgs = [
+  "python311",    # Python 3.11 interpreter (matches the Dockerfile base image)
+  "ffmpeg-full",  # ffmpeg with all codecs enabled (libmp3lame, libx264, etc.)
+                  # "ffmpeg-full" vs "ffmpeg": the full variant includes the
+                  # codec libraries needed for MP3 encoding (libmp3lame).
+                  # The slim variant would cause ffmpeg to fail on MP3 export.
+]
+
+
+# ── Install phase ──────────────────────────────────────────────────────────────
+# The install phase runs after setup. It installs Python dependencies.
+[phases.install]
+cmds = [
+  # Create an isolated virtual environment using --copies (not symlinks).
+  # --copies ensures the venv is fully self-contained — important because
+  # the Nix store paths can change between builds.
+  "python3.11 -m venv --copies /opt/venv",
+
+  # Activate the venv and install all pinned Python packages.
+  # The . (dot) command is the POSIX equivalent of `source` and works in sh.
+  # We use /opt/venv rather than the project directory so the venv survives
+  # across Railway's build cache layers.
+  ". /opt/venv/bin/activate && pip install -r requirements.txt",
+]
+
+
+# ── Start command ──────────────────────────────────────────────────────────────
+# The command Railway runs to start the application after a successful build.
+# The venv must be activated first because gunicorn is installed inside it.
+[start]
+cmd = ". /opt/venv/bin/activate && gunicorn app:app --config gunicorn.conf.py"
+#       ↑ activate the venv          ↑ run gunicorn   ↑ use our config file

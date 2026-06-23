@@ -1,0 +1,22 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# requirements-dev.txt — Development-only dependencies
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Install with:  pip install -r requirements-dev.txt
+#
+# These packages are NOT installed in production (Docker / Railway / Render).
+# They are only needed locally or in a CI pipeline to run the test suite.
+#
+# Production requirements are in requirements.txt.  Install both for a full
+# development environment:
+#   pip install -r requirements.txt -r requirements-dev.txt
+# ══════════════════════════════════════════════════════════════════════════════
+
+# pytest — test runner used for the entire test suite (tests/).
+# https://docs.pytest.org/
+pytest==8.3.5
+
+# pytest-cov — coverage plugin for pytest; reports line coverage to the terminal.
+# Run with:  pytest --cov=. --cov-report=term-missing
+# https://pytest-cov.readthedocs.io/
+pytest-cov==6.1.0

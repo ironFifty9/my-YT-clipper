@@ -1,0 +1,110 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# DOCKERFILE — YouTube Clipper Bot container image
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Build:  docker build -t yt-clipper .
+# Run:    docker run -p 5000:5000 -e SECRET_KEY=<key> -e BOT_TOKEN=<token> yt-clipper
+#
+# The image is also built automatically by Railway when you push to GitHub
+# (Railway falls back to Docker if no nixpacks.toml is detected, but we
+# provide both for compatibility with other platforms).
+#
+# Design decisions:
+#   - python:3.11-slim base: minimal Debian image with Python pre-installed.
+#     Avoids the bloat of python:3.11 (full) while having all libc/ssl deps
+#     that yt-dlp and requests need.
+#   - Layer ordering (system deps → pip deps → source code) maximises Docker's
+#     build cache. Changing a .py file only re-runs the last COPY, not the
+#     slow apt-get and pip steps.
+#   - Non-root USER: running as appuser instead of root limits the blast radius
+#     of any security vulnerability in yt-dlp, ffmpeg, or Flask.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Base image ─────────────────────────────────────────────────────────────────
+# python:3.11-slim is an official Docker image with Python 3.11 on Debian slim.
+# "slim" omits development headers and documentation, reducing image size by ~300 MB.
+FROM python:3.11-slim
+
+
+# ── System dependencies ────────────────────────────────────────────────────────
+# ffmpeg is the only system-level dependency. It is used in core/worker.py to
+# cut the downloaded video/audio file to the requested time range.
+#
+# Flags explained:
+#   apt-get update                   refresh the package index
+#   apt-get install -y               non-interactive install (no prompts)
+#   --no-install-recommends          skip "recommended" packages (saves ~50 MB)
+#   ffmpeg                           the only package we actually need
+#   rm -rf /var/lib/apt/lists/*      delete the package index cache — it is no
+#                                    longer needed after install and bloats the layer
+#
+# All three commands are chained in a single RUN to produce ONE Docker layer.
+# If they were three separate RUN commands, the apt cache would be baked into
+# an intermediate layer even after the rm -rf, preventing the size saving.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
+
+# ── Working directory ──────────────────────────────────────────────────────────
+# All subsequent COPY, RUN, and CMD instructions resolve paths relative to /app.
+# The directory is created automatically if it doesn't exist.
+WORKDIR /app
+
+
+# ── Python dependencies ────────────────────────────────────────────────────────
+# Copy requirements.txt FIRST (before the source code). This way, Docker
+# caches the pip install layer independently. If you only change a .py file,
+# Docker skips the slow pip install and reuses the cached layer.
+COPY requirements.txt .
+
+# --no-cache-dir: do not write pip's download cache to disk. The cache is only
+# useful for repeated installs on the same machine; inside a Docker build it
+# just wastes layer space.
+RUN pip install --no-cache-dir -r requirements.txt
+
+
+# ── Application source ─────────────────────────────────────────────────────────
+# Copy only the files that the application actually needs at runtime.
+# Everything listed in .dockerignore (README, .git, downloads/, __pycache__,
+# .env files, etc.) is automatically excluded from the build context.
+#
+# We copy explicitly rather than using `COPY . .` so that adding a new top-level
+# file (e.g. a test runner) doesn't accidentally end up in the production image.
+COPY app.py config.py gunicorn.conf.py ./   # application entry point + config
+COPY core/   ./core/                         # business logic package
+COPY routes/ ./routes/                       # HTTP route Blueprint
+
+
+# ── Port declaration ───────────────────────────────────────────────────────────
+# EXPOSE documents which port the container listens on. It does NOT publish
+# the port to the host — that requires -p 5000:5000 in `docker run` or the
+# port mapping in Railway/Render's dashboard.
+EXPOSE 5000
+
+
+# ── Non-root user ──────────────────────────────────────────────────────────────
+# Create a dedicated system user with no password, no home directory, and
+# no shell (GECOS field set to "" to suppress the interactive name prompt).
+# The USER directive below ensures all CMD processes run as this user.
+#
+# Why this matters: if a vulnerability in yt-dlp or ffmpeg allows arbitrary
+# command execution, the attacker gets appuser privileges (no sudo, no home
+# directory) rather than root privileges.
+#
+# Note: this RUN must come AFTER pip install because pip writes to /usr/local/lib,
+# which requires root. The USER directive only takes effect for CMD (and
+# subsequent RUN commands, if any).
+RUN adduser --disabled-password --no-create-home --gecos "" appuser
+USER appuser
+
+
+# ── Runtime command ────────────────────────────────────────────────────────────
+# Start gunicorn using the JSON (exec form) array syntax. Exec form is preferred
+# over shell form ("CMD gunicorn ...") because:
+#   - It does NOT spawn a shell process, so signals (SIGTERM, SIGINT) are
+#     delivered directly to gunicorn rather than being swallowed by the shell.
+#   - This means `docker stop` gracefully shuts down gunicorn instead of
+#     abruptly killing it after the stop timeout.
+CMD ["gunicorn", "app:app", "--config", "gunicorn.conf.py"]

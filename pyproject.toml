@@ -1,0 +1,100 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# pyproject.toml — Project metadata and tool configuration
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# This file serves two purposes:
+#
+#   1. Project metadata (PEP 517/518): identifies the package name, version,
+#      Python requirement, and dependencies so pip/build tools understand the
+#      project without a setup.py.
+#
+#   2. Tool configuration: Pyright, Pyrefly, MyPy, and pytest settings live
+#      here so their configs are co-located with the project instead of spread
+#      across separate files (pyrightconfig.json, .mypy.ini, pytest.ini, etc.).
+#
+# No build backend is declared (no [build-system] section) because this project
+# is a deployed web service, not an installable library.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Project metadata ───────────────────────────────────────────────────────────
+[project]
+name            = "telegram-yt-clipper"
+version         = "2.0.0"
+description     = "Telegram bot backend that clips YouTube videos via yt-dlp and ffmpeg"
+requires-python = ">=3.11"
+
+# Mirror of requirements.txt — kept in sync for tooling that reads pyproject.toml.
+# The authoritative install source remains requirements.txt (used by Docker/Railway).
+dependencies = [
+    "flask==3.1.1",
+    "yt-dlp==2025.6.9",
+    "requests==2.32.3",
+    "gunicorn==23.0.0",
+    "python-dotenv==1.0.1",
+    "redis==5.2.1",
+]
+
+[project.optional-dependencies]
+# Install with:  pip install -e ".[dev]"
+dev = [
+    "pytest==8.3.5",
+    "pytest-cov==6.1.0",
+]
+
+
+# ── pytest configuration ───────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+# Look for tests only in the tests/ directory.
+testpaths = ["tests"]
+
+# Default options applied to every `pytest` invocation:
+#   -v              verbose output (shows each test name and PASSED/FAILED)
+#   --tb=short      compact tracebacks — shows the assertion but not the full stack
+#   --cov=.         measure line coverage across the whole project root
+#   --cov-report=term-missing
+#               print the coverage table to the terminal; mark uncovered lines
+addopts = "-v --tb=short --cov=. --cov-report=term-missing"
+
+# Directories and patterns to exclude from coverage measurement.
+[tool.coverage.run]
+omit = [
+    "tests/*",
+    "venv/*",
+    ".venv/*",
+    "downloads/*",
+    "gunicorn.conf.py",
+    "setup.py",
+]
+
+[tool.coverage.report]
+# Lines that contain these patterns are excluded from coverage stats.
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
+
+# ── Pyright configuration ──────────────────────────────────────────────────────
+[tool.pyright]
+include          = ["."]
+exclude          = ["venv", ".venv", "downloads", "__pycache__", "*.egg-info"]
+pythonVersion    = "3.11"
+typeCheckingMode = "basic"
+venvPath         = "."
+venv             = "venv"
+
+
+# ── Pyrefly configuration ──────────────────────────────────────────────────────
+[tool.pyrefly]
+project_includes = ["."]
+python_version   = "3.11"
+project_excludes = ["venv", ".venv", "downloads", "__pycache__"]
+
+
+# ── MyPy configuration ─────────────────────────────────────────────────────────
+[tool.mypy]
+python_version         = "3.11"
+mypy_path              = "."
+ignore_missing_imports = true
