@@ -185,7 +185,7 @@ def process_clip(
 
         ydl_opts: dict = {
             "format": (
-                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+                "bv*+ba/b"
                 if fmt == "mp4"
                 else "bestaudio/best"
             ),
