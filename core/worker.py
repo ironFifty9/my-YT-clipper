@@ -200,7 +200,7 @@ def process_clip(
             # Cookies: bypass YouTube bot detection when available.
             "cookiefile":               COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
             # JS runtime: needed by yt-dlp 2026+ to solve YouTube challenges.
-            "js_runtimes":              {"node": None},
+            "js_runtimes":              {"node": {"path": None}},
         }
 
         if fmt == "mp4":
