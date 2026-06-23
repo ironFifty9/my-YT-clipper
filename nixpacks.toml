@@ -21,6 +21,7 @@
 [phases.setup]
 nixPkgs = [
   "python311",    # Python 3.11 interpreter (matches the Dockerfile base image)
+  "nodejs",       # Node.js — JS runtime for yt-dlp YouTube challenge solving
   "ffmpeg-full",  # ffmpeg with all codecs enabled (libmp3lame, libx264, etc.)
                   # "ffmpeg-full" vs "ffmpeg": the full variant includes the
                   # codec libraries needed for MP3 encoding (libmp3lame).

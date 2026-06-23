@@ -28,14 +28,14 @@ FROM python:3.11-slim
 
 
 # ── System dependencies ────────────────────────────────────────────────────────
-# ffmpeg is the only system-level dependency. It is used in core/worker.py to
-# cut the downloaded video/audio file to the requested time range.
+# ffmpeg is used in core/worker.py to cut the downloaded video/audio file.
+# nodejs provides a JS runtime for yt-dlp's YouTube challenge solving (EJS).
 #
 # Flags explained:
 #   apt-get update                   refresh the package index
 #   apt-get install -y               non-interactive install (no prompts)
 #   --no-install-recommends          skip "recommended" packages (saves ~50 MB)
-#   ffmpeg                           the only package we actually need
+#   ffmpeg nodejs                    runtime dependencies
 #   rm -rf /var/lib/apt/lists/*      delete the package index cache — it is no
 #                                    longer needed after install and bloats the layer
 #
@@ -43,7 +43,7 @@ FROM python:3.11-slim
 # If they were three separate RUN commands, the apt cache would be baked into
 # an intermediate layer even after the rm -rf, preventing the size saving.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg \
+ && apt-get install -y --no-install-recommends ffmpeg nodejs \
  && rm -rf /var/lib/apt/lists/*
 
 

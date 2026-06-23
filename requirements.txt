@@ -28,7 +28,9 @@ flask==3.1.1
 # Used in core/worker.py to fetch the video segment via download_ranges.
 # yt-dlp releases frequently; check https://github.com/yt-dlp/yt-dlp/releases
 # for updates when YouTube changes their player API (causes yt-dlp errors).
-yt-dlp==2025.6.9
+# yt-dlp-ejs provides the JS challenge solver scripts.
+yt-dlp==2026.6.9
+yt-dlp-ejs==0.8.0
 
 # requests — HTTP client library used in core/telegram.py to call the
 # Telegram Bot API (sendMessage, editMessageText, sendDocument).

@@ -67,6 +67,7 @@ downloads/
 # Always inject secrets via environment variables at runtime, not via COPY.
 .env      # standard dotenv file
 .env.*    # any variant (e.g. .env.local, .env.production)
+cookies.txt   # YouTube cookies — injected via COOKIES_B64 env var at runtime
 
 
 # ── Editor and OS artefacts ────────────────────────────────────────────────────
