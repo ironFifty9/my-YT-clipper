@@ -67,3 +67,8 @@ build/        # setuptools build directory
 # macOS creates .DS_Store files in every directory it browses.
 # These are pure metadata artefacts with no relevance to the project.
 .DS_Store
+
+# ── YouTube cookies ─────────────────────────────────────────────────────────────
+# Browser-exported cookies file used by yt-dlp for YouTube authentication.
+# Do NOT commit — export from browser, set as COOKIES_B64 env var for deployment.
+cookies.txt

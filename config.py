@@ -21,7 +21,8 @@ Environment variables to set in Railway / Render / Docker / .env:
   PORT                  — HTTP port gunicorn/Flask listens on (default: 5000)
 """
 
-import os               # for os.environ.get()
+import base64     # decode COOKIES_B64 to a file
+import os         # for os.environ.get()
 import secrets as _secrets  # aliased to avoid polluting the module namespace;
                             # used only for generating the fallback SECRET_KEY
 
@@ -102,3 +103,29 @@ MAX_JOBS_PER_CHAT_DAY: int = int(os.environ.get("MAX_JOBS_PER_CHAT_DAY", 5))
 # Railway injects PORT automatically; other platforms (Render, Heroku) do too.
 # Defaults to 5000 for local development.
 PORT: int = int(os.environ.get("PORT", 5000))
+
+
+# ── YouTube cookies (optional) ──────────────────────────────────────────────────
+# To bypass YouTube's bot detection, export your browser cookies after logging
+# into YouTube:
+#   1. Install a "cookies.txt" exporter extension in Chrome/Firefox
+#   2. Log into youtube.com in that browser
+#   3. Export cookies to a file
+#   4. Base64-encode the file and set COOKIES_B64:
+#        powershell:  [Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt"))
+#        bash/mac:    base64 -w0 cookies.txt
+#   5. Paste the long base64 string as the COOKIES_B64 env var in Render
+#
+# Alternatively, place cookies.txt in the project root (local dev only).
+# It is listed in .gitignore and will never be committed.
+COOKIES_PATH: str = os.environ.get("COOKIES_PATH", "cookies.txt")
+COOKIES_B64:  str | None = os.environ.get("COOKIES_B64") or None
+
+# If COOKIES_B64 is set, decode it into COOKIES_PATH at startup.
+if COOKIES_B64:
+    _cookies_dir = os.path.dirname(COOKIES_PATH) or "."
+    os.makedirs(_cookies_dir, exist_ok=True)
+    with open(COOKIES_PATH, "w", encoding="utf-8") as _f:
+        _f.write(base64.b64decode(COOKIES_B64).decode("utf-8"))
+    # Clear the env var so it doesn't leak in subprocesses.
+    del os.environ["COOKIES_B64"]

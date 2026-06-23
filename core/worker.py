@@ -59,7 +59,7 @@ import time       # sleep in _deferred_delete and ffmpeg poll loop
 import yt_dlp                           # YouTube/audio downloader
 from yt_dlp.utils import download_range_func   # CDN range extraction helper
 
-from config import DOWNLOAD_DIR, MAX_DURATION, MAX_FILE_MB
+from config import COOKIES_PATH, DOWNLOAD_DIR, MAX_DURATION, MAX_FILE_MB
 from core.jobs import CLIP_SEMAPHORE, finish_job, is_job_cancelled
 from core.telegram import tg_edit, tg_send_document
 from core.utils import progress_bar, safe_filename, time_to_seconds
@@ -197,6 +197,8 @@ def process_clip(
             "force_keyframes_at_cuts": True,
             # Cancel hook: raises JobCancelledError between downloaded chunks.
             "progress_hooks": [_make_cancel_hook(job_id)],
+            # Cookies: bypass YouTube bot detection when available.
+            "cookiefile":               COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
         }
 
         if fmt == "mp4":
