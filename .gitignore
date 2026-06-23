@@ -72,3 +72,4 @@ build/        # setuptools build directory
 # Browser-exported cookies file used by yt-dlp for YouTube authentication.
 # Do NOT commit — export from browser, set as COOKIES_B64 env var for deployment.
 cookies.txt
+cookies.b64
