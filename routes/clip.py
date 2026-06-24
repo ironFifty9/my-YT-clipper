@@ -729,12 +729,12 @@ def admin_dashboard():
                         <td>
                             <span class="status-badge badge-{{ job.status }}">{{ job.status }}</span>
                         </td>
-                        <td class="time-str">{{ job.created_at | datetime }}</td>
+                        <td class="time-str">{{ datetime(job.created_at) }}</td>
                         <td>
                             {% if job.status == 'error' %}
                             <div class="error-msg" title="{{ job.error }}">{{ job.error }}</div>
                             {% elif job.status == 'done' %}
-                            <span class="time-str">Finished {{ job.finished_at | datetime }}</span>
+                            <span class="time-str">Finished {{ datetime(job.finished_at) }}</span>
                             {% else %}
                             <span class="time-str">In progress...</span>
                             {% endif %}
