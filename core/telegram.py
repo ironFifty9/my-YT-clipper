@@ -18,6 +18,8 @@ Telegram API reference: https://core.telegram.org/bots/api
 import logging  # for structured error/warning logs
 import requests # for all outbound HTTP calls to api.telegram.org
 
+from config import TELEGRAM_API_URL
+
 log = logging.getLogger(__name__)   # scoped logger: "core.telegram"
 
 # ── Timeouts ───────────────────────────────────────────────────────────────────
@@ -31,7 +33,7 @@ _MSG_TIMEOUT = 15    # seconds — used by tg_send() and tg_edit()
 _UPLOAD_TIMEOUT = 120  # seconds — used by tg_send_document()
 
 
-def tg_send(bot_token: str, chat_id: str, text: str) -> dict:
+def tg_send(bot_token: str, chat_id: str, text: str, reply_markup: dict | None = None) -> dict:
     """
     Send a new message to a Telegram chat and return the full API response.
 
@@ -43,6 +45,7 @@ def tg_send(bot_token: str, chat_id: str, text: str) -> dict:
         bot_token: The Telegram Bot API token (e.g. "123456:ABCdef...").
         chat_id:   Telegram chat ID as a string (e.g. "987654321").
         text:      Message text. Markdown formatting is enabled.
+        reply_markup: Optional inline keyboard or other reply markup dict.
 
     Returns:
         The parsed JSON response from Telegram on success, e.g.:
@@ -51,13 +54,17 @@ def tg_send(bot_token: str, chat_id: str, text: str) -> dict:
           {"ok": False, "error": "<exception message>"}
     """
     try:
+        payload = {
+            "chat_id":    chat_id,
+            "text":       text,
+            "parse_mode": "Markdown",   # allows *bold*, _italic_, `code`
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+
         r = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={
-                "chat_id":    chat_id,
-                "text":       text,
-                "parse_mode": "Markdown",   # allows *bold*, _italic_, `code`
-            },
+            f"{TELEGRAM_API_URL}/bot{bot_token}/sendMessage",
+            json=payload,
             timeout=_MSG_TIMEOUT,
         )
         return r.json()   # let the caller check r.json()["result"]["message_id"]
@@ -73,6 +80,7 @@ def tg_edit(
     chat_id: str,
     message_id: int,
     text: str,
+    reply_markup: dict | None = None,
 ) -> None:
     """
     Edit an existing Telegram message in place.
@@ -86,6 +94,7 @@ def tg_edit(
         chat_id:    Telegram chat ID as a string.
         message_id: The integer ID of the message to update (from tg_send result).
         text:       New message content. Markdown formatting is enabled.
+        reply_markup: Optional inline keyboard or other reply markup dict.
 
     Returns:
         None. A failed edit is treated as non-fatal — if the edit fails
@@ -93,14 +102,18 @@ def tg_edit(
         a progress update but the job continues running normally.
     """
     try:
+        payload = {
+            "chat_id":    chat_id,
+            "message_id": message_id,
+            "text":       text,
+            "parse_mode": "Markdown",
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+
         r = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/editMessageText",
-            json={
-                "chat_id":    chat_id,
-                "message_id": message_id,
-                "text":       text,
-                "parse_mode": "Markdown",
-            },
+            f"{TELEGRAM_API_URL}/bot{bot_token}/editMessageText",
+            json=payload,
             timeout=_MSG_TIMEOUT,
         )
         # Log non-2xx responses as warnings (not errors) because a failed
@@ -143,7 +156,7 @@ def tg_send_document(
         # The `with` block ensures the file handle is closed even on error.
         with open(file_path, "rb") as fh:
             r = requests.post(
-                f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                f"{TELEGRAM_API_URL}/bot{bot_token}/sendDocument",
                 # Text fields go in `data`, the file goes in `files`.
                 # They cannot be combined in `json=` because of the binary file.
                 data={
@@ -166,3 +179,42 @@ def tg_send_document(
         # Network-level failure (timeout, DNS error, connection reset, etc.)
         log.error("tg_send_document network error: %s", e)
         return False  # caller will raise RuntimeError and notify the user
+
+
+def tg_set_webhook(bot_token: str, webhook_url: str) -> bool:
+    """
+    Configure Telegram webhook for the bot.
+    """
+    try:
+        r = requests.post(
+            f"{TELEGRAM_API_URL}/bot{bot_token}/setWebhook",
+            json={"url": webhook_url},
+            timeout=_MSG_TIMEOUT,
+        )
+        if r.ok:
+            log.info("Telegram webhook successfully set to: %s", webhook_url)
+            return True
+        log.error("Failed to set Telegram webhook: HTTP %s: %s", r.status_code, r.text[:500])
+        return False
+    except requests.RequestException as e:
+        log.error("tg_set_webhook network error: %s", e)
+        return False
+
+
+def tg_answer_callback_query(bot_token: str, callback_query_id: str, text: str | None = None) -> None:
+    """
+    Acknowledge Telegram callback queries to dismiss the loading state on the button.
+    """
+    try:
+        payload = {"callback_query_id": callback_query_id}
+        if text:
+            payload["text"] = text
+        r = requests.post(
+            f"{TELEGRAM_API_URL}/bot{bot_token}/answerCallbackQuery",
+            json=payload,
+            timeout=_MSG_TIMEOUT,
+        )
+        if not r.ok:
+            log.warning("tg_answer_callback_query HTTP %s: %s", r.status_code, r.text[:200])
+    except requests.RequestException as e:
+        log.warning("tg_answer_callback_query network error: %s", e)

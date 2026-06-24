@@ -129,3 +129,20 @@ if COOKIES_B64:
         _f.write(base64.b64decode(COOKIES_B64).decode("utf-8"))
     # Clear the env var so it doesn't leak in subprocesses.
     del os.environ["COOKIES_B64"]
+
+
+# ── Telegram Direct bot integrations & Webhook settings ─────────────────────────
+# If you want to use the bot directly (without Make.com), specify these:
+TELEGRAM_BOT_TOKEN: str | None = os.environ.get("TELEGRAM_BOT_TOKEN") or None
+
+# Custom Telegram API endpoint (useful for self-hosted Bot API servers which support files up to 2GB)
+TELEGRAM_API_URL: str = os.environ.get("TELEGRAM_API_URL", "https://api.telegram.org")
+
+# Publicly accessible webhook base URL, e.g. "https://your-app.up.railway.app"
+# If provided along with TELEGRAM_BOT_TOKEN, the webhook will be registered at startup automatically.
+TELEGRAM_WEBHOOK_URL: str | None = os.environ.get("TELEGRAM_WEBHOOK_URL") or None
+
+# ── Admin Dashboard authentication ──────────────────────────────────────────────
+# Token parameter to access the GET /admin dashboard (e.g. /admin?key=YOUR_SECRET_KEY)
+ADMIN_SECRET: str = os.environ.get("ADMIN_SECRET") or SECRET_KEY
+

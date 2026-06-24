@@ -98,6 +98,16 @@ if not os.environ.get("SECRET_KEY"):
 #    The thread is daemon=True, so it exits automatically when the process ends.
 start_pruner()
 
+# 5. Set up Telegram webhook asynchronously (does not block port binding/startup).
+if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_WEBHOOK_URL:
+    import threading
+    from core.telegram import tg_set_webhook
+    def _setup_webhook():
+        webhook_full_url = f"{config.TELEGRAM_WEBHOOK_URL.rstrip('/')}/tg-webhook/{config.TELEGRAM_BOT_TOKEN}"
+        tg_set_webhook(config.TELEGRAM_BOT_TOKEN, webhook_full_url)
+    threading.Thread(target=_setup_webhook, daemon=True, name="webhook-setup").start()
+
+
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 # Only reached when running directly with `python app.py` (development).

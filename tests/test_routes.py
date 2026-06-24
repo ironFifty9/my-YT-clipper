@@ -392,3 +392,85 @@ class TestStatus:
         create_job(job_id, "chat_x")
         data = client.get(f"/status/{job_id}").get_json()
         assert "created_at" in data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# POST /tg-webhook/<token>
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestWebhook:
+
+    def test_unauthorized_token_returns_401(self, client):
+        r = client.post("/tg-webhook/wrong-token", json={})
+        assert r.status_code == 401
+
+    @patch("routes.clip.TELEGRAM_BOT_TOKEN", "valid-bot-token")
+    def test_authorized_token_returns_200(self, client):
+        r = client.post("/tg-webhook/valid-bot-token", json={})
+        assert r.status_code == 200
+
+    @patch("routes.clip.TELEGRAM_BOT_TOKEN", "valid-bot-token")
+    @patch("core.telegram.tg_send", return_value={"ok": True})
+    def test_webhook_start_command(self, mock_send, client):
+        r = client.post(
+            "/tg-webhook/valid-bot-token",
+            json={
+                "message": {
+                    "chat": {"id": 12345},
+                    "text": "/start"
+                }
+            }
+        )
+        assert r.status_code == 200
+        mock_send.assert_called_once()
+
+    @patch("routes.clip.TELEGRAM_BOT_TOKEN", "valid-bot-token")
+    @patch("core.telegram.tg_send", return_value=TG_SEND_OK)
+    @patch("routes.clip.process_clip")
+    def test_webhook_valid_clip_command(self, mock_process, mock_send, client):
+        r = client.post(
+            "/tg-webhook/valid-bot-token",
+            json={
+                "message": {
+                    "chat": {"id": 12345},
+                    "text": "/clip https://youtube.com/watch?v=123 0:10 0:30"
+                }
+            }
+        )
+        assert r.status_code == 200
+        mock_send.assert_called_once()
+
+    @patch("routes.clip.TELEGRAM_BOT_TOKEN", "valid-bot-token")
+    @patch("core.telegram.tg_answer_callback_query")
+    def test_webhook_callback_query_cancel(self, mock_answer, client):
+        job_id = str(uuid.uuid4())
+        create_job(job_id, "12345")
+        r = client.post(
+            "/tg-webhook/valid-bot-token",
+            json={
+                "callback_query": {
+                    "id": "cb_query_123",
+                    "data": f"cancel:{job_id}"
+                }
+            }
+        )
+        assert r.status_code == 200
+        mock_answer.assert_called_once()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GET /admin
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestAdminDashboard:
+
+    def test_admin_unauthorized_key_returns_401(self, client):
+        r = client.get("/admin?key=wrong-secret")
+        assert r.status_code == 401
+
+    @patch("routes.clip.ADMIN_SECRET", "test-admin-secret")
+    def test_admin_authorized_key_renders_dashboard(self, client):
+        r = client.get("/admin?key=test-admin-secret")
+        assert r.status_code == 200
+        assert b"Clipper API Dashboard" in r.data
+

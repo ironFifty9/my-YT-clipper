@@ -112,17 +112,57 @@ def _check_cancel(job_id: str) -> None:
 
 # ── yt-dlp progress hook factory ──────────────────────────────────────────────
 
-def _make_cancel_hook(job_id: str):
+def _make_progress_and_cancel_hook(job_id: str, bot_token: str, chat_id: str, status_msg_id: int):
     """
-    Return a yt-dlp progress hook that raises JobCancelledError if the job
-    has been cancelled during the download step.
+    Return a yt-dlp progress hook that handles user cancellation and reports
+    real-time progress updates with throttling to avoid Telegram rate limits.
+    """
+    state = {"last_update": 0.0}
 
-    yt-dlp calls progress hooks synchronously between downloaded chunks, so
-    this provides sub-second cancellation response during active downloads.
-    """
     def _hook(d: dict) -> None:
-        if d.get("status") == "downloading" and is_job_cancelled(job_id):
+        if is_job_cancelled(job_id):
             raise JobCancelledError("Cancelled during download")
+
+        if d.get("status") == "downloading":
+            now = time.time()
+            if now - state["last_update"] >= 3.0:
+                state["last_update"] = now
+
+                downloaded = d.get("downloaded_bytes", 0)
+                total = d.get("total_bytes") or d.get("total_bytes_estimate")
+                speed = d.get("speed")  # B/s
+                eta = d.get("eta")      # seconds
+
+                speed_str = ""
+                if speed:
+                    if speed > 1024 * 1024:
+                        speed_str = f" @ {speed / (1024 * 1024):.1f} MB/s"
+                    elif speed > 1024:
+                        speed_str = f" @ {speed / 1024:.1f} KB/s"
+
+                eta_str = f" (ETA: {eta}s)" if eta else ""
+
+                if total:
+                    pct = int(100 * downloaded / total)
+                    width = 12
+                    filled = int(width * pct / 100)
+                    bar = "█" * filled + "░" * (width - filled)
+                    bar_str = f"`[{bar}] {pct}%`"
+                else:
+                    bar_str = f"`{downloaded / (1024 * 1024):.1f} MB`"
+
+                msg = (
+                    f"📥 *Step 1/4 — Downloading video…*\n"
+                    f"{bar_str}{speed_str}{eta_str}"
+                )
+
+                cancel_markup = {
+                    "inline_keyboard": [[
+                        {"text": "🚫 Cancel", "callback_data": f"cancel:{job_id}"}
+                    ]]
+                }
+                tg_edit(bot_token, chat_id, status_msg_id, msg, reply_markup=cancel_markup)
+
     return _hook
 
 
@@ -155,6 +195,13 @@ def process_clip(
     out_file: str | None = None   # trimmed clip output path
     src_file: str | None = None   # raw downloaded source path
 
+    # Define cancellation button payload
+    cancel_markup = {
+        "inline_keyboard": [[
+            {"text": "🚫 Cancel", "callback_data": f"cancel:{job_id}"}
+        ]]
+    }
+
     try:
         # ── Validate timestamps ────────────────────────────────────────────────
         start_sec = time_to_seconds(start)
@@ -179,6 +226,7 @@ def process_clip(
         tg_edit(
             bot_token, chat_id, status_msg_id,
             f"📥 *Step 1/4 — Downloading video…*\n{progress_bar(1)}",
+            reply_markup=cancel_markup,
         )
 
         temp_base = os.path.join(DOWNLOAD_DIR, f"{job_id}_src")
@@ -195,8 +243,8 @@ def process_clip(
             # CDN range extraction: only fetch the bytes we need (Fix #8).
             "download_ranges":         download_range_func(None, [(start_sec, end_sec)]),
             "force_keyframes_at_cuts": True,
-            # Cancel hook: raises JobCancelledError between downloaded chunks.
-            "progress_hooks": [_make_cancel_hook(job_id)],
+            # Cancel + Progress hook: raises JobCancelledError & updates progress at throttled intervals.
+            "progress_hooks": [_make_progress_and_cancel_hook(job_id, bot_token, chat_id, status_msg_id)],
             # Cookies: bypass YouTube bot detection when available.
             "cookiefile":               COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
             # JS runtime: needed by yt-dlp 2026+ to solve YouTube challenges.
@@ -231,6 +279,7 @@ def process_clip(
         tg_edit(
             bot_token, chat_id, status_msg_id,
             f"✂️ *Step 2/4 — Cutting clip…*\n{progress_bar(2)}",
+            reply_markup=cancel_markup,
         )
 
         out_label = safe_filename(filename) if filename else "clip"
@@ -320,10 +369,71 @@ def process_clip(
         tg_edit(
             bot_token, chat_id, status_msg_id,
             f"📤 *Step 3/4 — Uploading to Telegram…*\n{progress_bar(3)}",
+            reply_markup=cancel_markup,
         )
 
         max_bytes = MAX_FILE_MB * 1024 * 1024
         file_size = os.path.getsize(out_file)
+
+        # Auto-compression downscaling fallback if the video exceeds 50MB
+        if file_size > max_bytes and fmt == "mp4":
+            log.warning("Job %s output too large (%s MB). Triggering auto-downscaling compression.", job_id, file_size / 1024 / 1024)
+            tg_edit(
+                bot_token, chat_id, status_msg_id,
+                f"⚠️ *File too large ({file_size / 1024 / 1024:.1f} MB). Compressing/downscaling to fit limit...*\n"
+                f"`[░░░░░░░░░░░░░░░░░░]   0%`",
+                reply_markup=cancel_markup,
+            )
+
+            comp_file = out_file + ".comp.mp4"
+            comp_cmd = [
+                "ffmpeg", "-y",
+                "-i", out_file,
+                "-vf", "scale=-2:480",  # downscale height to 480p, preserve aspect ratio
+                "-c:v", "libx264",
+                "-crf", "30",
+                "-preset", "fast",
+                "-c:a", "aac",
+                "-b:a", "96k",
+                comp_file
+            ]
+
+            _ffmpeg_deadline = time.monotonic() + 300   # 300 s hard cap
+            proc = subprocess.Popen(
+                comp_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            while proc.poll() is None:
+                if is_job_cancelled(job_id):
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                    raise JobCancelledError("Cancelled during compression")
+
+                if time.monotonic() > _ffmpeg_deadline:
+                    proc.kill()
+                    proc.wait()
+                    raise RuntimeError("ffmpeg compression timed out after 300 seconds")
+
+                time.sleep(0.25)
+
+            result_returncode = proc.returncode
+            proc.stdout.close()
+            proc.stderr.close()
+
+            if result_returncode != 0:
+                raise RuntimeError("ffmpeg compression failed")
+
+            if os.path.exists(comp_file):
+                os.remove(out_file)
+                os.rename(comp_file, out_file)
+                file_size = os.path.getsize(out_file)
+
         if file_size > max_bytes:
             raise ValueError(
                 f"File too large ({file_size / 1024 / 1024:.1f} MB). "
@@ -388,9 +498,10 @@ def process_clip(
         CLIP_SEMAPHORE.release()
 
         # Delete any temp files not already removed or disowned.
-        for f in (src_file, out_file):
+        for f in (src_file, out_file, out_file + ".comp.mp4" if out_file else None):
             if f and os.path.exists(f):
                 try:
                     os.remove(f)
                 except OSError:
                     pass
+
